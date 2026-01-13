@@ -1,5 +1,9 @@
-use leptos::prelude::*;
+use leptos::{mount::mount_to_body, prelude::*};
+
+mod app;
+mod pages;
+mod layout;
 
 fn main() {
-    leptos::mount::mount_to_body(|| view! { <p>"Hello, world!"</p> })
+    mount_to_body(|| view! { <app::App /> })
 }
