@@ -1,0 +1,107 @@
+name: Test Leptos CSR Build
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test-build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Install Trunk
+        run: |
+          wget -qO- https://github.com/trunk-rs/trunk/releases/latest/download/trunk-x86_64-unknown-linux-gnu.tar.gz | tar -xzf-
+          sudo mv trunk /usr/local/bin/
+
+      - name: Run Cargo tests
+        run: cargo test --verbose
+
+      - name: Build with Trunk
+        run: trunk build --release
+
+      - name: Verify build artifacts
+        run: |
+          if [ ! -d "dist" ]; then
+            echo "Error: dist directory not found"
+            exit 1
+          fi
+          if [ ! -f "dist/index.html" ]; then
+            echo "Error: index.html not found in dist"
+            exit 1
+          fi
+          echo "Build artifacts verified successfully"
+          ls -lah dist/
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: leptos-build
+          path: dist/
+          retention-days: 7
+
+  test-docker-build:
+    runs-on: ubuntu-latest
+    needs: test-build
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: false
+          tags: leptos-app:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Test Docker image
+        run: |
+          docker run -d -p 8080:80 --name leptos-test leptos-app:test
+          sleep 5
+          
+          # Test if the server is responding
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080)
+          
+          if [ "$HTTP_CODE" -eq 200 ]; then
+            echo "✓ Docker container is serving successfully"
+          else
+            echo "✗ Docker container test failed with HTTP code: $HTTP_CODE"
+            docker logs leptos-test
+            exit 1
+          fi
+          
+          # Clean up
+          docker stop leptos-test
+          docker rm leptos-test
