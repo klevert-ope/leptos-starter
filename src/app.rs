@@ -3,10 +3,12 @@ use leptos_router::components::{Router, Routes, Route};
 use leptos_router::StaticSegment;
 
 use crate::layout::main_layout::MainLayout;
-use crate::pages::{HomePage, AboutPage, NotFoundPage};
+use crate::views::{HomePage, AboutPage, NotFoundPage};
 
 #[component]
 pub fn App() -> impl IntoView {
+    tracing::debug!("Rendering App component");
+    
     view! {
         <Router>
             <MainLayout>
